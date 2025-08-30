@@ -1,0 +1,31 @@
+name: Validate naming
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  create:
+    branches: ["**"]
+jobs:
+  check-branch-pr:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate branch name
+        if: github.event.ref
+        env:
+          BRANCH_NAME: ${{ github.ref_name }}
+        run: |
+          echo "Branch: $BRANCH_NAME"
+          if [[ ! $BRANCH_NAME =~ ^(feat|fix|hotfix|refactor|chore|docs|test)\/[A-Z]+-[0-9]+-[a-z0-9-]+$ ]] && \
+             [[ ! $BRANCH_NAME =~ ^(feat|fix|hotfix|refactor|chore|docs|test)\/[a-z0-9-]+$ ]]; then
+            echo "::error::Branch name does not match org conventions"; exit 1; fi
+
+      - name: Validate PR title (Conventional Commits)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions-ecosystem/action-regex-match@v2
+        id: pr
+        with:
+          text: ${{ github.event.pull_request.title }}
+          regex: '^(feat|fix|refactor|chore|docs|test|perf|build|ci|revert)(\([^)]+\))?!?: .+'
+      - name: Fail if PR title invalid
+        if: ${{ github.event_name == 'pull_request' && steps.pr.outputs.match != 'true' }}
+        run: |
+          echo "::error::PR title must follow Conventional Commits"; exit 1
