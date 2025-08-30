@@ -1,0 +1,48 @@
+name: Validate naming
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+  create:
+    branches: ["**"]
+
+jobs:
+  check-branch-pr:
+    runs-on: ubuntu-latest
+    steps:
+      # Always get a clean branch name (works for PRs and direct branch creates)
+      - name: Determine branch name
+        id: branch
+        shell: bash
+        run: |
+          BRANCH_NAME="${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}"
+          echo "branch=$BRANCH_NAME" >> "$GITHUB_OUTPUT"
+          echo "Detected branch: $BRANCH_NAME"
+
+      - name: Validate branch name
+        shell: bash
+        run: |
+          BRANCH_NAME="${{ steps.branch.outputs.branch }}"
+          echo "Validating: $BRANCH_NAME"
+          if [[ ! $BRANCH_NAME =~ ^(feat|fix|hotfix|refactor|chore|docs|test)/[A-Z]+-[0-9]+-[a-z0-9-]+$ ]] && \
+             [[ ! $BRANCH_NAME =~ ^(feat|fix|hotfix|refactor|chore|docs|test)/[a-z0-9-]+$ ]]; then
+            echo "::error::Branch name '$BRANCH_NAME' does not match conventions.
+            Allowed:
+              - <type>/<TICKET-ID>-<short-kebab>   (e.g., feat/HSO-1234-add-retry-policy)
+              - <type>/<short-kebab>               (e.g., chore/add-naming-standards)"
+            exit 1
+          fi
+
+      - name: Validate PR title (Conventional Commits)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions-ecosystem/action-regex-match@v2
+        id: pr
+        with:
+          text: ${{ github.event.pull_request.title }}
+          regex: '^(feat|fix|refactor|chore|docs|test|perf|build|ci|revert)(\([^)]+\))?!?: .+'
+
+      - name: Fail if PR title invalid
+        if: ${{ github.event_name == 'pull_request' && steps.pr.outputs.match != 'true' }}
+        run: |
+          echo "::error::PR title must follow Conventional Commits, e.g. 'chore(standards): add workflow and templates'"; 
+          exit 1
